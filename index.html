@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#11131b" />
+    <title>Brújula — tu espacio de estudio</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="#" aria-label="Brújula, inicio">
+          <span class="brand-mark">b.</span>
+          <span>brújula<span class="brand-dot">.</span></span>
+        </a>
+        <div class="sidebar-label">TU ESPACIO</div>
+        <nav class="main-nav" aria-label="Navegación principal">
+          <button class="nav-link active" data-view="calendar"><span class="nav-icon">▦</span> Calendario</button>
+          <button class="nav-link" data-view="tasks"><span class="nav-icon">✓</span> Tareas <span class="nav-count" id="task-count">0</span></button>
+          <button class="nav-link" data-view="library"><span class="nav-icon">▤</span> Biblioteca</button>
+          <button class="nav-link" data-view="claude"><span class="nav-icon">✳</span> Claude</button>
+        </nav>
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-label">TUS CONEXIONES</div>
+        <div class="connection-list">
+          <a class="connection" id="classroom-link" href="https://classroom.google.com/" target="_blank" rel="noopener noreferrer"><span class="connection-icon google">G</span><span>Classroom</span><span class="external-mark">↗</span></a>
+          <a class="connection" id="goodnotes-link" href="https://www.goodnotes.com/" target="_blank" rel="noopener noreferrer"><span class="connection-icon goodnotes">✎</span><span>Goodnotes</span><span class="external-mark">↗</span></a>
+          <a class="connection" id="github-link" href="https://github.com/" target="_blank" rel="noopener noreferrer"><span class="connection-icon github">⌘</span><span>GitHub</span><span class="external-mark">↗</span></a>
+        </div>
+        <div class="sidebar-bottom">
+          <div class="sync-card">
+            <span class="sync-indicator"></span>
+            <div><strong>Guardado en este dispositivo</strong><small>Tus datos son privados</small></div>
+          </div>
+          <button class="settings-button" id="open-settings"><span>⚙</span> Configurar conexiones</button>
+          <div class="sidebar-user">
+            <div class="avatar">E</div>
+            <div><strong>Mi espacio</strong><small>Organiza tu curso</small></div>
+            <span class="more-icon">···</span>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div class="breadcrumb"><span>Mi espacio</span><span class="crumb-separator">/</span><strong id="breadcrumb-current">Calendario</strong></div>
+          <div class="topbar-actions">
+            <label class="search-box">
+              <span>⌕</span>
+              <input id="global-search" type="search" placeholder="Buscar apuntes o tareas..." aria-label="Buscar apuntes o tareas" />
+              <kbd>⌘ K</kbd>
+            </label>
+            <button class="icon-button" id="top-settings" aria-label="Configuración" title="Configuración">⚙</button>
+          </div>
+        </header>
+        <section class="view-content" id="view-root" aria-live="polite"></section>
+      </main>
+    </div>
+    <dialog id="editor-dialog" class="editor-dialog">
+      <form id="editor-form" method="dialog">
+        <div class="dialog-heading">
+          <div><span class="eyebrow" id="dialog-eyebrow">NUEVO</span><h2 id="dialog-title">Añadir elemento</h2></div>
+          <button type="button" class="close-button" id="close-dialog" aria-label="Cerrar">×</button>
+        </div>
+        <div id="dialog-fields" class="dialog-fields"></div>
+        <div class="dialog-actions">
+          <button type="button" class="button button-quiet" id="cancel-dialog">Cancelar</button>
+          <button type="submit" class="button button-primary" id="save-dialog">Guardar</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="settings-dialog" class="editor-dialog settings-dialog">
+      <form id="settings-form" method="dialog">
+        <div class="dialog-heading">
+          <div><span class="eyebrow">PERSONALIZA TU ESPACIO</span><h2>Conexiones</h2></div>
+          <button type="button" class="close-button" id="close-settings" aria-label="Cerrar">×</button>
+        </div>
+        <p class="dialog-description">Añade los enlaces de tus cuentas para tenerlas a mano. Los cambios se guardan en este dispositivo.</p>
+        <label class="field-label">Google Classroom<input name="classroomUrl" type="url" placeholder="https://classroom.google.com/" /></label>
+        <label class="field-label">Goodnotes<input name="goodnotesUrl" type="url" placeholder="https://www.goodnotes.com/" /></label>
+        <label class="field-label">Mi perfil o repositorio de GitHub<input name="githubUrl" type="url" placeholder="https://github.com/MaestroSpliinter" /></label>
+        <label class="field-label">Claude<input name="claudeUrl" type="url" placeholder="https://claude.ai/" /></label>
+        <p class="integration-note"><strong>Nota:</strong> estos botones abren tus servicios. La importación automática de tareas de Classroom requiere configurar una aplicación OAuth de Google.</p>
+        <div class="dialog-actions">
+          <button type="button" class="button button-quiet" id="cancel-settings">Cancelar</button>
+          <button type="submit" class="button button-primary">Guardar conexiones</button>
+        </div>
+      </form>
+    </dialog>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
