@@ -34,12 +34,13 @@
         <div class="sidebar-bottom">
           <div class="sync-card">
             <span class="sync-indicator"></span>
-            <div><strong>Guardado en este dispositivo</strong><small>Tus datos son privados</small></div>
+            <div><strong id="sync-title">Solo en este dispositivo</strong><small id="sync-detail">Inicia sesión para sincronizar</small></div>
           </div>
+          <button class="settings-button" id="open-auth"><span>☁</span> Cuenta y sincronización</button>
           <button class="settings-button" id="open-settings"><span>⚙</span> Configurar conexiones</button>
           <div class="sidebar-user">
             <div class="avatar">E</div>
-            <div><strong>Mi espacio</strong><small>Organiza tu curso</small></div>
+            <div><strong id="account-label">Mi espacio</strong><small id="account-email">Organiza tu curso</small></div>
             <span class="more-icon">···</span>
           </div>
         </div>
@@ -54,6 +55,7 @@
               <input id="global-search" type="search" placeholder="Buscar apuntes o tareas..." aria-label="Buscar apuntes o tareas" />
               <kbd>⌘ K</kbd>
             </label>
+            <button class="icon-button" id="account-button" aria-label="Cuenta y sincronización" title="Cuenta y sincronización">☁</button>
             <button class="icon-button" id="top-settings" aria-label="Configuración" title="Configuración">⚙</button>
           </div>
         </header>
@@ -84,14 +86,42 @@
         <label class="field-label">Goodnotes<input name="goodnotesUrl" type="url" placeholder="https://www.goodnotes.com/" /></label>
         <label class="field-label">Mi perfil o repositorio de GitHub<input name="githubUrl" type="url" placeholder="https://github.com/MaestroSpliinter" /></label>
         <label class="field-label">Claude<input name="claudeUrl" type="url" placeholder="https://claude.ai/" /></label>
-        <p class="integration-note"><strong>Nota:</strong> estos botones abren tus servicios. La importación automática de tareas de Classroom requiere configurar una aplicación OAuth de Google.</p>
+        <p class="integration-note"><strong>Nota:</strong> estos botones abren tus servicios. La importación automática de tareas de Classroom requiere configurar una aplicación OAuth de Google. Las conexiones se guardan en este dispositivo.</p>
         <div class="dialog-actions">
           <button type="button" class="button button-quiet" id="cancel-settings">Cancelar</button>
           <button type="submit" class="button button-primary">Guardar conexiones</button>
         </div>
       </form>
     </dialog>
+    <dialog id="auth-dialog" class="editor-dialog">
+      <form id="auth-form">
+        <div class="dialog-heading">
+          <div><span class="eyebrow">TUS DATOS EN TODOS TUS DISPOSITIVOS</span><h2 id="auth-title">Sincronizar con Supabase</h2></div>
+          <button type="button" class="close-button" id="close-auth" aria-label="Cerrar">×</button>
+        </div>
+        <div id="auth-fields">
+          <p class="dialog-description">Inicia sesión o crea una cuenta. Tus tareas, apuntes y calendario se guardarán en tu cuenta personal.</p>
+          <div class="dialog-fields">
+            <label class="field-label">Correo electrónico<input name="email" type="email" autocomplete="email" required /></label>
+            <label class="field-label">Contraseña<input name="password" type="password" autocomplete="current-password" minlength="6" required /></label>
+          </div>
+          <div class="dialog-actions">
+            <button type="button" class="button button-quiet" id="sign-up">Crear cuenta</button>
+            <button type="submit" class="button button-primary" id="sign-in">Iniciar sesión</button>
+          </div>
+        </div>
+        <div id="account-fields" hidden>
+          <p class="dialog-description" id="signed-in-email"></p>
+          <p class="integration-note" id="account-sync-message">Tu cuenta está conectada.</p>
+          <div class="dialog-actions">
+            <button type="button" class="button button-quiet" id="retry-sync" hidden>Reintentar sincronización</button>
+            <button type="button" class="button button-quiet" id="sign-out">Cerrar sesión</button>
+          </div>
+        </div>
+      </form>
+    </dialog>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.min.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

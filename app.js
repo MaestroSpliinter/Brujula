@@ -25,6 +25,10 @@ const DEFAULTS = {
     claudeUrl: "https://claude.ai/",
   },
 };
+const SUPABASE_URL = "https://fwpoypmmdfbtgbizwqso.supabase.co";
+const SUPABASE_PUBLIC_KEY = "sb_publishable_pfmNmSZcEEGgoRNT9Fe2vw_mwpEbo0m";
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY);
+const LOCAL_OWNER_KEY = "brujula-owner-id";
 
 const root = document.querySelector("#view-root");
 const editorDialog = document.querySelector("#editor-dialog");
@@ -33,7 +37,17 @@ const dialogFields = document.querySelector("#dialog-fields");
 const settingsDialog = document.querySelector("#settings-dialog");
 const settingsForm = document.querySelector("#settings-form");
 const toast = document.querySelector("#toast");
+const authDialog = document.querySelector("#auth-dialog");
+const authForm = document.querySelector("#auth-form");
 let state = loadState();
+let activeUser = null;
+let cloudSyncReady = false;
+let cloudSyncStatus = "local";
+let accountSyncPromise = null;
+let accountSyncUserId = null;
+let cloudSaveQueue = Promise.resolve();
+let cloudRefreshPromise = null;
+let stateRevision = 0;
 let activeView = "calendar";
 let calendarDate = new Date();
 let selectedDate = dateKey(new Date());
@@ -60,12 +74,211 @@ function loadState() {
 function saveState() {
   try {
     localStorage.setItem("brujula-data", JSON.stringify(state));
+    stateRevision += 1;
   } catch (error) {
     console.error("No se pudieron guardar los datos.", error);
     showToast("No se pudieron guardar los cambios. Revisa el almacenamiento del navegador.");
     return false;
   }
+  if (activeUser && cloudSyncReady) queueCloudSave();
   return true;
+}
+
+function normalizeState(value) {
+  const saved = value && typeof value === "object" ? value : {};
+  return {
+    ...structuredClone(DEFAULTS),
+    ...saved,
+    events: Array.isArray(saved.events) ? saved.events : [],
+    tasks: Array.isArray(saved.tasks) ? saved.tasks : [],
+    notes: Array.isArray(saved.notes) ? saved.notes : [],
+    settings: { ...DEFAULTS.settings, ...(saved.settings || {}) },
+  };
+}
+
+function setSyncStatus(status, detail) {
+  cloudSyncStatus = status;
+  document.querySelector("#sync-title").textContent = status === "synced" ? "Sincronizado en la nube" : status === "syncing" ? "Sincronizando…" : status === "error" ? "Error de sincronización" : "Solo en este dispositivo";
+  document.querySelector("#sync-detail").textContent = detail;
+  document.querySelector(".sync-indicator").style.background = status === "error" ? "var(--red)" : status === "synced" ? "var(--green)" : "var(--amber)";
+  document.querySelector("#account-label").textContent = activeUser ? "Mi cuenta" : "Mi espacio";
+  document.querySelector("#account-email").textContent = activeUser?.email || "Organiza tu curso";
+  document.querySelector("#auth-fields").hidden = Boolean(activeUser);
+  document.querySelector("#account-fields").hidden = !activeUser;
+  document.querySelector("#auth-title").textContent = activeUser ? "Tu cuenta" : "Sincronizar con Supabase";
+  document.querySelector("#signed-in-email").textContent = activeUser?.email || "";
+  document.querySelector("#account-sync-message").textContent = status === "error"
+    ? "Has iniciado sesión, pero no se pudo conectar con la base de datos. Comprueba la configuración de Supabase."
+    : status === "synced" ? "Tus cambios se guardan en la nube al guardar. Al abrir la app en otro dispositivo, inicia sesión con esta cuenta."
+      : status === "syncing" ? "Conectando y sincronizando tus datos…"
+        : "Tu cuenta está conectada.";
+  document.querySelector("#retry-sync").hidden = !activeUser || status !== "error";
+}
+
+function queueCloudSave() {
+  const userId = activeUser.id;
+  const snapshot = structuredClone(state);
+  setSyncStatus("syncing", "Guardando cambios en la nube…");
+  cloudSaveQueue = cloudSaveQueue.then(async () => {
+    if (!activeUser || activeUser.id !== userId || !cloudSyncReady) return;
+    const { error } = await supabaseClient.from("brujula_data").upsert(
+      { user_id: userId, data: snapshot, updated_at: new Date().toISOString() },
+      { onConflict: "user_id" },
+    );
+    if (error) throw error;
+    if (activeUser?.id === userId) setSyncStatus("synced", "Guardado en tu cuenta");
+  }).catch((error) => {
+    console.error("No se pudieron sincronizar los datos con Supabase.", error);
+    if (activeUser?.id === userId) {
+      cloudSyncReady = false;
+      setSyncStatus("error", "No se pudo guardar en la nube");
+      showToast("No se pudo sincronizar. Tus datos siguen guardados en este dispositivo.");
+    }
+  });
+}
+
+async function connectCloudAccount(user) {
+  if (!user) {
+    activeUser = null;
+    cloudSyncReady = false;
+    document.querySelector(".app-shell").inert = false;
+    setSyncStatus("local", "Inicia sesión para sincronizar");
+    return;
+  }
+  if (activeUser?.id === user.id && cloudSyncReady) return;
+  if (accountSyncUserId === user.id && accountSyncPromise) return accountSyncPromise;
+
+  activeUser = user;
+  cloudSyncReady = false;
+  document.querySelector(".app-shell").inert = true;
+  accountSyncUserId = user.id;
+  setSyncStatus("syncing", "Conectando con tu cuenta…");
+  accountSyncPromise = (async () => {
+    const { data: row, error } = await supabaseClient
+      .from("brujula_data")
+      .select("data")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (error) throw error;
+
+    if (row) {
+      state = normalizeState(row.data);
+      localStorage.setItem("brujula-data", JSON.stringify(state));
+    } else {
+      if (localStorage.getItem(LOCAL_OWNER_KEY) && localStorage.getItem(LOCAL_OWNER_KEY) !== user.id) {
+        state = structuredClone(DEFAULTS);
+      }
+      const { error: saveError } = await supabaseClient.from("brujula_data").insert({
+        user_id: user.id,
+        data: structuredClone(state),
+      });
+      if (saveError) throw saveError;
+      localStorage.setItem("brujula-data", JSON.stringify(state));
+    }
+    localStorage.setItem(LOCAL_OWNER_KEY, user.id);
+    if (activeUser?.id !== user.id) return;
+    cloudSyncReady = true;
+    setSyncStatus("synced", "Guardado en tu cuenta");
+    render();
+  })().catch((error) => {
+    console.error("No se pudo cargar la cuenta de Supabase.", error);
+    if (activeUser?.id === user.id) {
+      cloudSyncReady = false;
+      setSyncStatus("error", "Revisa la configuración de Supabase");
+      showToast("No se pudo conectar con la nube. Tus datos locales se han conservado.");
+    }
+  }).finally(() => {
+    document.querySelector(".app-shell").inert = false;
+    accountSyncPromise = null;
+    accountSyncUserId = null;
+  });
+  return accountSyncPromise;
+}
+
+async function handleAuthSubmit(event) {
+  event.preventDefault();
+  const formData = new FormData(authForm);
+  const email = String(formData.get("email") || "").trim();
+  const password = String(formData.get("password") || "");
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  if (error) {
+    console.error("No se pudo iniciar sesión.", error);
+    showToast("No se pudo iniciar sesión. Revisa el correo y la contraseña.");
+    return;
+  }
+  await connectCloudAccount(data.user);
+  authDialog.close();
+  if (cloudSyncReady) showToast("Sesión iniciada y datos sincronizados.");
+}
+
+async function handleSignUp() {
+  if (!authForm.reportValidity()) return;
+  const formData = new FormData(authForm);
+  const email = String(formData.get("email") || "").trim();
+  const password = String(formData.get("password") || "");
+  const { data, error } = await supabaseClient.auth.signUp({
+    email,
+    password,
+    options: { emailRedirectTo: window.location.href },
+  });
+  if (error) {
+    console.error("No se pudo crear la cuenta.", error);
+    showToast("No se pudo crear la cuenta. Comprueba el correo y la configuración de Supabase.");
+    return;
+  }
+  if (data.session) {
+    await connectCloudAccount(data.user);
+    authDialog.close();
+    if (cloudSyncReady) showToast("Cuenta creada y datos sincronizados.");
+  } else {
+    showToast("Cuenta creada. Confirma tu correo y vuelve para iniciar sesión.");
+  }
+}
+
+async function handleSignOut() {
+  await cloudSaveQueue;
+  const { error } = await supabaseClient.auth.signOut();
+  if (error) {
+    console.error("No se pudo cerrar sesión.", error);
+    showToast("No se pudo cerrar la sesión. Inténtalo de nuevo.");
+    return;
+  }
+  activeUser = null;
+  cloudSyncReady = false;
+  setSyncStatus("local", "Inicia sesión para sincronizar");
+  authDialog.close();
+  showToast("Sesión cerrada. Los datos locales siguen guardados en este dispositivo.");
+}
+
+async function refreshCloudData() {
+  if (!activeUser || !cloudSyncReady || cloudRefreshPromise) return cloudRefreshPromise;
+  const userId = activeUser.id;
+  cloudRefreshPromise = (async () => {
+    await cloudSaveQueue;
+    if (!activeUser || activeUser.id !== userId || !cloudSyncReady) return;
+    const revisionAtRequest = stateRevision;
+    const { data: row, error } = await supabaseClient
+      .from("brujula_data")
+      .select("data")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!row || activeUser?.id !== userId || stateRevision !== revisionAtRequest) return;
+    state = normalizeState(row.data);
+    localStorage.setItem("brujula-data", JSON.stringify(state));
+    setSyncStatus("synced", "Guardado en tu cuenta");
+    render();
+  })().catch((error) => {
+    console.error("No se pudieron actualizar los datos desde Supabase.", error);
+    if (activeUser?.id === userId) {
+      cloudSyncReady = false;
+      setSyncStatus("error", "No se pudo actualizar desde la nube");
+      showToast("No se pudieron actualizar los datos de la nube. Tus datos locales se conservan.");
+    }
+  }).finally(() => {
+    cloudRefreshPromise = null;
+  });
+  return cloudRefreshPromise;
 }
 
 function showToast(message) {
@@ -400,6 +613,13 @@ document.addEventListener("click", handleClick);
 document.addEventListener("change", handleChange);
 editorForm.addEventListener("submit", handleEditorSubmit);
 settingsForm.addEventListener("submit", handleSettingsSubmit);
+authForm.addEventListener("submit", handleAuthSubmit);
+document.querySelector("#sign-up").addEventListener("click", handleSignUp);
+document.querySelector("#sign-out").addEventListener("click", handleSignOut);
+document.querySelector("#retry-sync").addEventListener("click", () => connectCloudAccount(activeUser));
+document.querySelector("#open-auth").addEventListener("click", () => authDialog.showModal());
+document.querySelector("#close-auth").addEventListener("click", () => authDialog.close());
+document.querySelector("#account-button").addEventListener("click", () => authDialog.showModal());
 document.querySelector("#open-settings").addEventListener("click", openSettings);
 document.querySelector("#top-settings").addEventListener("click", openSettings);
 document.querySelector("#close-dialog").addEventListener("click", () => editorDialog.close());
@@ -421,6 +641,17 @@ root.addEventListener("keydown", (event) => {
     event.preventDefault();
     selectedDate = event.target.dataset.date;
     renderCalendar();
+  }
+});
+window.addEventListener("focus", () => void refreshCloudData());
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") void refreshCloudData();
+});
+supabaseClient.auth.onAuthStateChange((event, session) => {
+  if (event === "SIGNED_OUT") {
+    void connectCloudAccount(null);
+  } else if (session?.user && ["INITIAL_SESSION", "SIGNED_IN", "TOKEN_REFRESHED", "USER_UPDATED"].includes(event)) {
+    queueMicrotask(() => void connectCloudAccount(session.user));
   }
 });
 render();
